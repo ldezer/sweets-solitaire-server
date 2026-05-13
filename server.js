@@ -41,7 +41,7 @@ function makeRng(seed) {
 }
 
 function shuffleDeck(seed) {
-  const suits = ['s','h','d','c'];
+  const suits = ['s','h','c','d'];
   const ranks = ['a','2','3','4','5','6','7','8','9','10','j','q','k'];
   const rng = makeRng(seed);
   const d = [];
@@ -213,6 +213,37 @@ function applyBotMove(bot, move) {
   if (bot.foundCount > prevFound) bot.noProgress = 0; else bot.noProgress++;
 }
 
+
+// --- Solvable Deal Picker ---
+// The server only starts online rooms with seeds that the built-in solver can finish.
+// This keeps Quick Match and Private online races on winnable hands.
+const SOLVABLE_FALLBACK_SEEDS = [20,31,98,139,145,170,207,295,411,435,518,617,829,943,1009,1217,1381,1607,1789,1999];
+let solvableSeedCursor = 0;
+
+function isSeedSolvable(seed) {
+  const bot = createBotState(0, seed);
+  bot.diff = 2;
+  bot.speed = 0;
+  for (let step = 0; step < 5000; step++) {
+    if (bot.foundCount >= 52) return true;
+    const move = getBotMove(bot);
+    if (!move) return false;
+    applyBotMove(bot, move);
+  }
+  return bot.foundCount >= 52;
+}
+
+function pickSolvableSeed() {
+  const base = Math.floor(Math.random() * 999983) + 1;
+  for (let attempt = 0; attempt < 700; attempt++) {
+    const seed = ((base + attempt * 9973) % 999983) + 1;
+    if (isSeedSolvable(seed)) return seed;
+  }
+  const fallback = SOLVABLE_FALLBACK_SEEDS[solvableSeedCursor % SOLVABLE_FALLBACK_SEEDS.length];
+  solvableSeedCursor++;
+  return fallback;
+}
+
 function summarizeParticipant(p) {
   return {
     id: p.id,
@@ -322,7 +353,7 @@ function createRoom(mode, hostSocketId, hostPlayerId, hostName, waitSeconds, max
     mode,
     hostSocketId,
     hostId: hostPlayerId,
-    seed: Math.floor(Math.random() * 999983) + 1,
+    seed: pickSolvableSeed(),
     waitSeconds,
     secondsLeft: waitSeconds,
     maxPlayers: Math.max(2, Math.min(maxPlayers || MAX_PLAYERS, MAX_PLAYERS)),
